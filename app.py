@@ -9,7 +9,7 @@ from datetime import datetime
 # --- Configuración de la Página ---
 st.set_page_config(
     page_title="Panel de Control de Riesgos",
-    page_icon="🚨",
+    page_icon="🚒",
     layout="wide",
     initial_sidebar_state="auto" # Mostrar la barra lateral por defecto
 )
@@ -171,7 +171,7 @@ if 'incident_location' not in st.session_state:
 risk_data = generate_mock_data(num_points, risk_intensity)
 
 # --- Interfaz de Usuario ---
-st.markdown("<h1 class='main-title'>🚨 Panel de Control de Riesgos Urbanos</h1>", unsafe_allow_html=True)
+st.markdown("<h1 class='main-title'>🚒 Panel de Control de Riesgos Operativos</h1>", unsafe_allow_html=True)
 # --- Fila 1: Monitoreo en vivo y predicciones ---
 col1, col2 = st.columns([2, 3])
 with col1:
@@ -181,21 +181,29 @@ with col1:
     st.metric(label="Batería", value=f"{np.random.randint(70, 95)}%")
 
 with col2:
-    st.subheader("🔮 Predicciones de Probabilidad de Riesgo")
-    sub_col1, sub_col2, sub_col3 = st.columns(3)
+    st.subheader("🔮 Predicciones de Riesgos Operativos (Bomberos)")
+    sub_col1, sub_col2, sub_col3, sub_col4 = st.columns(4) # Cambiado a 4 columnas
     overall_risk_from_data = risk_data['risk_level'].mean()
-    traffic_risk = np.clip(overall_risk_from_data * np.random.uniform(0.3, 0.6), 1, 100)
-    fire_risk = np.clip(overall_risk_from_data * np.random.uniform(0.1, 0.3), 1, 100)
-    security_risk = np.clip(overall_risk_from_data * np.random.uniform(0.4, 0.8), 1, 100)
+    
+    # Simulación de riesgos operativos específicos
+    traffic_accident_risk = np.clip(overall_risk_from_data * np.random.uniform(0.3, 0.6), 5, 100)
+    dehydration_risk = np.clip(overall_risk_from_data * np.random.uniform(0.2, 0.7), 10, 100)
+    disorientation_risk = np.clip(overall_risk_from_data * np.random.uniform(0.1, 0.5), 5, 100)
+    personnel_accident_risk = np.clip(overall_risk_from_data * np.random.uniform(0.2, 0.4), 10, 100)
+
     with sub_col1:
-        st.markdown("<h5>Riesgo de Tráfico</h5>", unsafe_allow_html=True)
-        st.plotly_chart(create_gauge(int(traffic_risk), color="orange"), use_container_width=True)
+        st.markdown("<h5>Accidente de Tránsito</h5>", unsafe_allow_html=True)
+        st.plotly_chart(create_gauge(int(traffic_accident_risk), color="orange"), use_container_width=True)
     with sub_col2:
-        st.markdown("<h5>Riesgo de Incendio</h5>", unsafe_allow_html=True)
-        st.plotly_chart(create_gauge(int(fire_risk), color="red"), use_container_width=True)
+        st.markdown("<h5>Deshidratación</h5>", unsafe_allow_html=True)
+        st.plotly_chart(create_gauge(int(dehydration_risk), color="#ADD8E6"), use_container_width=True) # Light Blue
     with sub_col3:
-        st.markdown("<h5>Riesgo de Seguridad</h5>", unsafe_allow_html=True)
-        st.plotly_chart(create_gauge(int(security_risk), color="yellow"), use_container_width=True)
+        st.markdown("<h5>Desorientación</h5>", unsafe_allow_html=True)
+        st.plotly_chart(create_gauge(int(disorientation_risk), color="yellow"), use_container_width=True)
+    with sub_col4:
+        st.markdown("<h5>Accidente de Personal</h5>", unsafe_allow_html=True)
+        st.plotly_chart(create_gauge(int(personnel_accident_risk), color="red"), use_container_width=True)
+
 
 st.divider()
 
@@ -223,7 +231,7 @@ with col1:
 with col2:
     st.subheader("📈 Nivel de Riesgo General")
     overall_risk = int(risk_data['risk_level'].mean())
-    st.plotly_chart(create_gauge(overall_risk, title="Riesgo Total", color="red"), use_container_width=True)
+    st.plotly_chart(create_gauge(overall_risk, title="Riesgo Total de la Operación", color="red"), use_container_width=True)
     st.subheader("Tendencias de Riesgo (Última Hora)")
     trend_data = pd.DataFrame({'Minuto': range(-60, 0, 5), 'Nivel de Riesgo': np.clip(np.random.normal(overall_risk, 10, 12), 1, 100)})
     st.line_chart(trend_data.set_index('Minuto'), color="#FF4B4B")
@@ -237,7 +245,11 @@ with col1:
     st.plotly_chart(create_routing_graph(num_nodes, edge_prob), use_container_width=True)
     st.metric(label="Tiempo Estimado de Llegada", value=f"{np.random.randint(8, 15)} min {np.random.randint(0, 59)} seg")
 with col2:
-    st.subheader("📊 Tendencia de Incidentes (Últimas 24h)")
-    incident_trend = pd.DataFrame(np.random.randint(0, int(max(1, risk_intensity/5))), size=(24, 3), columns=['Tráfico', 'Incendios', 'Seguridad'])
+    st.subheader("📊 Tendencia de Alertas Operativas (Últimas 24h)")
+    incident_trend = pd.DataFrame(
+        np.random.randint(0, int(max(1, risk_intensity/10))), 
+        size=(24, 4), 
+        columns=['Acc. Tránsito', 'Deshidratación', 'Desorientación', 'Acc. Personal']
+    )
     st.bar_chart(incident_trend)
 
