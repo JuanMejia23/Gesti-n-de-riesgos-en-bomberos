@@ -9,7 +9,7 @@ from sklearn.neighbors import KDTree
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(
-    page_title="Panel de Control de Riesgos Operativos",
+    page_title="Panel de Control de Riesgos Operacionales",
     page_icon="🚒",
     layout="wide",
     initial_sidebar_state="auto"
@@ -18,28 +18,10 @@ st.set_page_config(
 # --- ESTILOS CSS ---
 st.markdown("""
 <style>
-    /* Ocultar el botón de despliegue de Streamlit */
-    .stDeployButton {
-        visibility: hidden;
-    }
-    /* Ajustar el padding del contenedor principal */
-    .block-container {
-        padding-top: 2rem;
-        padding-bottom: 2rem;
-    }
-    /* Estilo para el título principal */
-    .main-title {
-        font-size: 2.8rem;
-        font-weight: bold;
-        text-align: center;
-        margin-bottom: 2rem;
-    }
-    /* Estilo para los títulos de las secciones */
-    h5 {
-        text-align: center;
-        font-weight: bold;
-        margin-bottom: -10px; /* Reducir espacio con el gráfico */
-    }
+    .stDeployButton { visibility: hidden; }
+    .block-container { padding-top: 2rem; padding-bottom: 2rem; }
+    .main-title { font-size: 2.8rem; font-weight: bold; text-align: center; margin-bottom: 2rem; }
+    h5 { text-align: center; font-weight: bold; margin-bottom: -10px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -58,25 +40,47 @@ def create_gauge(value, max_val=100, color="red"):
             'borderwidth': 2,
             'bordercolor': "#444",
             'steps': [
-                {'range': [0, max_val * 0.5], 'color': '#28a745'}, # Verde
-                {'range': [max_val * 0.5, max_val * 0.8], 'color': '#ffc107'}, # Amarillo
-                {'range': [max_val * 0.8, max_val], 'color': '#dc3545'}], # Rojo
+                {'range': [0, max_val * 0.4], 'color': '#28a745'}, # Verde
+                {'range': [max_val * 0.4, max_val * 0.7], 'color': '#ffc107'}, # Amarillo
+                {'range': [max_val * 0.7, max_val], 'color': '#dc3545'}], # Rojo
         }))
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor='rgba(0,0,0,0)',
         font={'color': 'white'},
-        height=180, # Altura reducida para acomodar más gráficos
-        margin=dict(t=20, b=20, l=30, r=30)
+        height=200,
+        margin=dict(t=30, b=20, l=30, r=30)
     )
     return fig
 
-# --- DATOS Y ESTADO DE SESIÓN ---
+def calculate_dynamic_risks(temp, smoke_level, visibility):
+    """Calcula los valores de riesgo basados en condiciones de exposición simuladas."""
+    risks = {}
+    
+    # Mapeo de visibilidad a un factor numérico (peor visibilidad = mayor riesgo)
+    visibility_factor = {'Buena': 0.2, 'Regular': 0.6, 'Mala': 1.0}[visibility]
 
-# Coordenadas de la estación de bomberos de Guadalajara de Buga
+    # 1. Deshidratación: Aumenta exponencialmente con la temperatura
+    risks['Deshidratación'] = np.clip((temp - 20) * 3.5 + np.random.randint(-5, 5), 5, 100)
+
+    # 2. Exposición Química: Directamente proporcional al nivel de humo/químicos
+    risks['Exposición Química'] = np.clip(smoke_level / 5 + np.random.randint(-5, 5), 5, 100)
+    
+    # 3. Desorientación y Desubicación: Afectado por la visibilidad y el humo
+    risks['Desorientación y Desubicación'] = np.clip(visibility_factor * 60 + smoke_level / 20 + np.random.randint(-10, 10), 5, 100)
+
+    # 4. Accidente de Personal: Es un riesgo general influenciado por todas las condiciones adversas
+    risks['Accidente de Personal'] = np.clip((risks['Deshidratación']/4 + risks['Desorientación y Desubicación']/3 + risks['Exposición Química']/5), 10, 100)
+    
+    # 5. Contagio Biológico: Un riesgo base, podría ser más complejo en un modelo real
+    risks['Contagio Biológico'] = np.clip(np.random.randint(5, 25) + (smoke_level / 50), 5, 100)
+    
+    return {k: int(v) for k, v in risks.items()}
+
+
+# --- DATOS Y ESTADO DE SESIÓN ---
 FIRE_STATION_COORDS = {"lat": 3.9002, "lon": -76.3020, "tooltip": "Estación de Bomberos Buga"}
 
-# Inicializar estado de la sesión para la simulación
 if 'incident_location' not in st.session_state:
     st.session_state.incident_location = {
         "lat": FIRE_STATION_COORDS["lat"] + np.random.uniform(-0.05, 0.05),
@@ -89,13 +93,19 @@ if 'incident_location' not in st.session_state:
         'tooltip': ['Unidad M-5', 'Ambulancia B-2', 'Logística T-1']
     })
 
-# --- BARRA LATERAL (CONTROLES) ---
-st.sidebar.header("🔧 Controles de Simulación")
-risk_intensity = st.sidebar.slider("Intensidad General del Incidente (1-100)", 1, 100, 65)
+# --- BARRA LATERAL (CONTROLES DE EXPOSICIÓN) ---
+st.sidebar.header("🔧 Simulación de Exposición")
+st.sidebar.write("Ajusta las condiciones del entorno para ver cómo afectan los riesgos del personal.")
+
+temp_ambiente = st.sidebar.slider("Temperatura en el Incidente (°C)", 15, 60, 35)
+smoke_level = st.sidebar.slider("Nivel de Humo/Químicos (PPM)", 0, 500, 150)
+visibility = st.sidebar.select_slider("Visibilidad en la Zona", options=['Buena', 'Regular', 'Mala'], value='Regular')
+
+st.sidebar.header("⚙️ Simulación del Mapa")
 num_intersections = st.sidebar.slider("Nº de Intersecciones (Nodos)", 50, 500, 150)
 traffic_level = st.sidebar.slider("Nivel de Tráfico Simulado", 1, 10, 5)
 
-if st.sidebar.button("🔄 Generar Nuevo Escenario"):
+if st.sidebar.button("🔄 Generar Nuevo Incidente"):
     st.session_state.clear()
     st.rerun()
 
@@ -103,35 +113,24 @@ if st.sidebar.button("🔄 Generar Nuevo Escenario"):
 # --- INTERFAZ PRINCIPAL ---
 st.markdown("<h1 class='main-title'>🚒 Panel de Control de Riesgos Operacionales</h1>", unsafe_allow_html=True)
 
-# --- FILA 1: PREDICCIONES DE RIESGOS OPERATIVOS ---
-st.subheader("🔮 Predicciones de Riesgos Operativos en Tiempo Real")
+# --- FILA 1: PREDICCIONES DE RIESGOS DINÁMICOS ---
+st.subheader("🔮 Predicciones de Riesgos (Basado en Exposición)")
 
-# Riesgos extraídos del documento
 operational_risks = {
-    "Desorientación": {"color": "#ffc107"}, # Amarillo
-    "Colapso Estructural": {"color": "#dc3545"}, # Rojo
-    "Exposición a Hazmat": {"color": "#fd7e14"}, # Naranja
-    "Estrés Térmico": {"color": "#0dcaf0"}, # Cian
-    "Fallas SCBA": {"color": "#6f42c1"}, # Indigo
-    "Accidentes de Personal": {"color": "#dc3545"}, # Rojo
-    "Comunicaciones deficientes": {"color": "#ffc107"}, # Amarillo
-    "Riesgo Eléctrico": {"color": "#fd7e14"}, # Naranja
-    "Flashovers": {"color": "#dc3545"}, # Rojo
-    "Atrapamiento": {"color": "#6f42c1"}  # Indigo
+    "Accidente de Personal": {"color": "#dc3545"},
+    "Deshidratación": {"color": "#0dcaf0"},
+    "Desorientación y Desubicación": {"color": "#ffc107"},
+    "Contagio Biológico": {"color": "#28a745"},
+    "Exposición Química": {"color": "#fd7e14"},
 }
 
-# Generar valores simulados para cada riesgo
-risk_values = {name: np.clip(risk_intensity * np.random.uniform(0.5, 1.2), 10, 100) for name in operational_risks}
+risk_values = calculate_dynamic_risks(temp_ambiente, smoke_level, visibility)
 
-# Mostrar los 10 medidores en dos filas
-row1_cols = st.columns(5)
-row2_cols = st.columns(5)
-
+risk_cols = st.columns(5)
 for i, (risk_name, properties) in enumerate(operational_risks.items()):
-    col = row1_cols[i] if i < 5 else row2_cols[i - 5]
-    with col:
+    with risk_cols[i]:
         st.markdown(f"<h5>{risk_name}</h5>", unsafe_allow_html=True)
-        st.plotly_chart(create_gauge(int(risk_values[risk_name]), color=properties["color"]), use_container_width=True)
+        st.plotly_chart(create_gauge(risk_values[risk_name], color=properties["color"]), use_container_width=True)
 
 st.divider()
 
@@ -139,68 +138,37 @@ st.divider()
 col1, col2 = st.columns([3, 2])
 
 with col1:
-    st.subheader("🗺️ Sistema de Información Geográfica (GIS) y Ruteo")
-    st.caption(f"Última actualización: {datetime.now().strftime('%H:%M:%S')}")
-
-    # --- Lógica de Ruteo Geoespacial ---
-    # 1. Crear un 'bounding box' alrededor de la estación y el incidente
-    min_lat = min(FIRE_STATION_COORDS["lat"], st.session_state.incident_location["lat"]) - 0.02
-    max_lat = max(FIRE_STATION_COORDS["lat"], st.session_state.incident_location["lat"]) + 0.02
-    min_lon = min(FIRE_STATION_COORDS["lon"], st.session_state.incident_location["lon"]) - 0.02
-    max_lon = max(FIRE_STATION_COORDS["lon"], st.session_state.incident_location["lon"]) + 0.02
-
-    # 2. Generar nodos (intersecciones) dentro del bounding box
-    nodes_df = pd.DataFrame({
-        'lat': np.random.uniform(min_lat, max_lat, num_intersections),
-        'lon': np.random.uniform(min_lon, max_lon, num_intersections)
-    })
-
-    # 3. Construir el grafo y encontrar los nodos más cercanos al origen y destino
-    G = nx.Graph()
-    node_coords = np.array(nodes_df[['lat', 'lon']])
+    st.subheader("🗺️ Sistema de Información Geográfica (GIS) - Simulación")
+    st.caption(f"Simulación basada en mapa virtual. Última actualización: {datetime.now().strftime('%H:%M:%S')}")
+    
+    # Lógica de ruteo no ha cambiado, sigue siendo una simulación geoespacial.
+    min_lat, max_lat = min(FIRE_STATION_COORDS["lat"], st.session_state.incident_location["lat"]) - 0.02, max(FIRE_STATION_COORDS["lat"], st.session_state.incident_location["lat"]) + 0.02
+    min_lon, max_lon = min(FIRE_STATION_COORDS["lon"], st.session_state.incident_location["lon"]) - 0.02, max(FIRE_STATION_COORDS["lon"], st.session_state.incident_location["lon"]) + 0.02
+    nodes_df = pd.DataFrame({'lat': np.random.uniform(min_lat, max_lat, num_intersections), 'lon': np.random.uniform(min_lon, max_lon, num_intersections)})
+    G, node_coords = nx.Graph(), np.array(nodes_df[['lat', 'lon']])
     kdtree = KDTree(node_coords)
-
-    # Añadir nodos al grafo
-    for i, row in nodes_df.iterrows():
-        G.add_node(i, pos=(row['lon'], row['lat']))
-
-    # Conectar nodos cercanos para simular calles
+    for i, row in nodes_df.iterrows(): G.add_node(i, pos=(row['lon'], row['lat']))
     for i in range(len(node_coords)):
         distances, indices = kdtree.query([node_coords[i]], k=5)
-        for j in indices[0][1:]: # Conectar con los 4 vecinos más cercanos
-            dist = distances[0][list(indices[0]).index(j)]
-            # Añadir "tráfico" como peso
-            weight = dist * (1 + np.random.uniform(0, traffic_level))
+        for j_idx, j in enumerate(indices[0][1:]):
+            weight = distances[0][j_idx+1] * (1 + np.random.uniform(0, traffic_level))
             G.add_edge(i, j, weight=weight)
-    
-    # Encontrar los nodos del grafo más cercanos a la estación y al incidente
-    start_node = kdtree.query([[FIRE_STATION_COORDS['lat'], FIRE_STATION_COORDS['lon']]], k=1)[1][0][0]
-    end_node = kdtree.query([[st.session_state.incident_location['lat'], st.session_state.incident_location['lon']]], k=1)[1][0][0]
-    
-    # 4. Calcular la ruta más corta
+    start_node, end_node = kdtree.query([[FIRE_STATION_COORDS['lat'], FIRE_STATION_COORDS['lon']]], k=1)[1][0][0], kdtree.query([[st.session_state.incident_location['lat'], st.session_state.incident_location['lon']]], k=1)[1][0][0]
     try:
         path = nx.shortest_path(G, source=start_node, target=end_node, weight='weight')
-        path_coords = [G.nodes[i]['pos'] for i in path]
-        route_df = pd.DataFrame(path_coords, columns=['lon', 'lat'])
+        route_df = pd.DataFrame([G.nodes[i]['pos'] for i in path], columns=['lon', 'lat'])
     except nx.NetworkXNoPath:
-        route_df = pd.DataFrame(columns=['lon', 'lat']) # Ruta vacía si no se encuentra
+        route_df = pd.DataFrame(columns=['lon', 'lat'])
     
-    # --- Visualización del Mapa con Pydeck ---
-    # Capas del mapa
-    fire_station_layer = pdk.Layer('IconLayer', data=pd.DataFrame([FIRE_STATION_COORDS]), get_position='[lon, lat]', get_icon=lambda r: {'url': 'https://img.icons8.com/color/48/000000/fire-station.png', 'width': 200, 'height': 200, 'anchorY': 200}, get_size=4, size_scale=15, pickable=True)
-    incident_layer = pdk.Layer('IconLayer', data=pd.DataFrame([st.session_state.incident_location]), get_position='[lon, lat]', get_icon=lambda r: {'url': 'https://img.icons8.com/fluency/48/siren.png', 'width': 240, 'height': 240, 'anchorY': 240}, get_size=4, size_scale=20, pickable=True)
-    vehicle_layer = pdk.Layer('IconLayer', data=st.session_state.vehicle_locations, get_position='[lon, lat]', get_icon=lambda r: {'url': 'https://img.icons8.com/ultraviolet/40/000000/fire-truck.png', 'width': 200, 'height': 200, 'anchorY': 200}, get_size=4, size_scale=12, pickable=True)
-    
-    route_layer = pdk.Layer('PathLayer', data=route_df, get_path='[lon, lat]', get_width=8, width_scale=1, get_color=[255, 0, 0, 200], pickable=True)
-
+    # Capas y visualización del mapa
+    layers = [
+        pdk.Layer('PathLayer', data=route_df, get_path='[lon, lat]', get_width=8, width_scale=1, get_color=[255, 0, 0, 200]),
+        pdk.Layer('IconLayer', data=pd.DataFrame([FIRE_STATION_COORDS]), get_position='[lon, lat]', get_icon=lambda r: {'url': 'https://img.icons8.com/color/48/000000/fire-station.png', 'width': 200, 'height': 200, 'anchorY': 200}, get_size=4, size_scale=15, pickable=True),
+        pdk.Layer('IconLayer', data=pd.DataFrame([st.session_state.incident_location]), get_position='[lon, lat]', get_icon=lambda r: {'url': 'https://img.icons8.com/fluency/48/siren.png', 'width': 240, 'height': 240, 'anchorY': 240}, get_size=4, size_scale=20, pickable=True),
+        pdk.Layer('IconLayer', data=st.session_state.vehicle_locations, get_position='[lon, lat]', get_icon=lambda r: {'url': 'https://img.icons8.com/ultraviolet/40/000000/fire-truck.png', 'width': 200, 'height': 200, 'anchorY': 200}, get_size=4, size_scale=12, pickable=True)
+    ]
     view_state = pdk.ViewState(latitude=np.mean([min_lat, max_lat]), longitude=np.mean([min_lon, max_lon]), zoom=13, pitch=45)
-    
-    st.pydeck_chart(pdk.Deck(
-        layers=[route_layer, fire_station_layer, incident_layer, vehicle_layer],
-        initial_view_state=view_state,
-        map_style='mapbox://styles/mapbox/dark-v9',
-        tooltip={"text": "{tooltip}"}
-    ))
+    st.pydeck_chart(pdk.Deck(layers=layers, initial_view_state=view_state, map_style='mapbox://styles/mapbox/dark-v9', tooltip={"text": "{tooltip}"}))
 
 with col2:
     st.subheader("📈 Nivel de Riesgo General")
@@ -208,10 +176,6 @@ with col2:
     st.plotly_chart(create_gauge(overall_risk, max_val=100, color="#dc3545"), use_container_width=True)
 
     st.subheader("📊 Tendencia de Alertas (Últimas 24h)")
-    # El gráfico de barras ahora refleja los 10 riesgos
-    incident_trend_df = pd.DataFrame(
-        np.random.randint(0, int(max(1, risk_intensity/10)), size=(24, len(operational_risks))),
-        columns=list(operational_risks.keys())
-    )
+    incident_trend_df = pd.DataFrame(np.random.randint(0, int(max(1, overall_risk/5)), size=(24, len(operational_risks))), columns=list(operational_risks.keys()))
     st.bar_chart(incident_trend_df)
 
